@@ -1,6 +1,7 @@
 import dataclasses
+from src.db.models import ListOfTasks as dbListOfTasks
 
 
 @dataclasses.dataclass
 class User:
-    nickname: str
+    id: int
