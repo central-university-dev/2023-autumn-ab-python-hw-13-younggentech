@@ -306,14 +306,40 @@ async def delete_task(receive, send, user_model):
     pass
 
 
-async def get_task(send, user_model):
-    pass
+async def get_task(send, user_model, query: str):
+    kwarg = query.split("=")
+    if len(kwarg) != 2 or kwarg[0] != "list_id" or not kwarg[1].isnumeric():
+        await respond(send, 400, {"success": False})
+    list_id = int(kwarg[1])
+    with Session(engine) as session:
+        user = session.scalar(select(User).where(User.id == user_model.id))
+        if user.is_admin:
+            tasks = session.scalars(select(Task).where(Task.list_id == list_id))
+        else:
+            tasks = session.scalars(
+                select(Task, ListOfTasks).where(
+                    Task.list_id == list_id,
+                    ListOfTasks.id == list_id,
+                    ListOfTasks.user_id == user.id,
+                )
+            )
+        serialised = [
+            {
+                "id": tsk.id,
+                "name": tsk.name,
+                "description": tsk.description,
+                "is_done": tsk.is_done
+            }
+            for tsk in tasks
+        ]
+    await respond(send, 200, {"success": True, "tasks": serialised})
 
 
 async def task(scope, receive, send, user_model):
     """
     All Endpoints require authentication Bearer header with issued JWT.
-    GET Endpoint takes task_list id - int as a query param
+    GET Endpoint requres query param:
+        list_id - int
     POST Endpoint requires body params:
         name - str
         description - str
@@ -336,7 +362,8 @@ async def task(scope, receive, send, user_model):
     elif scope["method"] == "DELETE":
         await delete_task(receive, send, user_model)
     elif scope["method"] == "GET":
-        await get_task(send, user_model)
+        query = scope["query_string"].decode()
+        await get_task(send, user_model, query)
     else:
         await respond(send, 405, {})
 
